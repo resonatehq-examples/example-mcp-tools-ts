@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "resonate-weather": {
+      "command": "npx",
+      "args": [
+        "tsx",
+        "/REPLACE/WITH/YOUR/PATH/example-mcp-tools-ts/src/weather-server.ts"
+      ]
+    },
+    "resonate-invoice": {
+      "command": "npx",
+      "args": [
+        "tsx",
+        "/REPLACE/WITH/YOUR/PATH/example-mcp-tools-ts/src/invoice-server.ts"
+      ]
+    }
+  }
+}
