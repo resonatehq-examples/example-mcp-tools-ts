@@ -1,248 +1,45 @@
-# Durable MCP Tools with Resonate
+# Building MCP Tools with Resonate
 
-> **The simpler alternative to Temporal for building reliable AI tool integrations**
+Build production-ready MCP (Model Context Protocol) tools with automatic retries, state management, and fault tolerance using Resonate.
 
-This project demonstrates how to build production-ready MCP (Model Context Protocol) tools with automatic retries, state management, and fault tolerance using Resonate - with **dramatically less complexity** than Temporal.
+## What You'll Build
 
-## 🚀 Why Resonate Over Temporal?
+This example demonstrates two real-world MCP tools:
 
-| Feature | Temporal | Resonate |
-|---------|----------|----------|
-| **Processes needed** | 3 (Server + Worker + MCP) | 1 (Just MCP) |
-| **Setup complexity** | High | Low |
-| **Decorators** | 5+ types (`@workflow.defn`, `@workflow.run`, `@activity.defn`, `@workflow.signal`, `@workflow.query`) | 1 (`resonate.run()`) |
-| **Special imports** | Required (`workflow.unsafe.imports_passed_through()`) | None |
-| **Task queues** | Manual configuration | Automatic |
-| **Lines of code** | ~150 (weather example) | ~80 (same functionality) |
-| **Learning curve** | Steep | Gentle |
-| **Infrastructure** | Temporal server required | Optional (works locally) |
+1. **Weather Forecast Tool** - Fetch real-time weather data with automatic retries and error handling
+2. **Invoice Processing** - Submit invoices with human-in-the-loop approval workflows
 
-## 📊 Side-by-Side Comparison
+Both examples show how Resonate's durable execution guarantees make AI tool integrations reliable without complex infrastructure.
 
-### Weather Forecast Example
+## Why Resonate for MCP Tools?
 
-#### Temporal's Approach (Python)
+**Automatic Retries**  
+API calls automatically retry on failure without losing context.
 
-```python
-# Need 4 separate files + running Temporal server + Worker process
+**State Persistence**  
+Long-running operations (like waiting for human approval) maintain state across restarts.
 
-# activities.py
-from temporalio import activity
-import httpx
+**Simple Code**  
+Write regular async functions. Resonate handles durability.
 
-@activity.defn
-async def make_nws_request(url: str) -> dict[str, Any] | None:
-    headers = {"User-Agent": USER_AGENT, "Accept": "application/geo+json"}
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers, timeout=5.0)
-        response.raise_for_status()
-        return response.json()
+**No Infrastructure**  
+Start with local development, scale to production without architectural changes.
 
-# workflow.py
-from temporalio import workflow
-from datetime import timedelta
+## Quick Start
 
-# Special import pattern required!
-with workflow.unsafe.imports_passed_through():
-    from workflows.weather_activities import make_nws_request
-
-@workflow.defn
-class GetForecast:
-    @workflow.run
-    async def run(self, latitude: float, longitude: float) -> str:
-        # Step 1: Get forecast endpoint
-        points_url = f"{NWS_API_BASE}/points/{latitude},{longitude}"
-        points_data = await workflow.execute_activity(
-            make_nws_request,
-            points_url,
-            start_to_close_timeout=timedelta(seconds=40),
-        )
-        
-        # ... more boilerplate ...
-
-# worker.py
-async def main():
-    client = await Client.connect("localhost:7233")
-    worker = Worker(
-        client,
-        task_queue="weather-task-queue",
-        workflows=[GetForecast],
-        activities=[make_nws_request],
-    )
-    await worker.run()
-
-# weather.py (MCP server)
-@mcp.tool()
-async def get_forecast(latitude: float, longitude: float) -> str:
-    client = await Client.connect("localhost:7233")
-    handle = await client.start_workflow(
-        GetForecast,
-        args=[latitude, longitude],
-        id=f"forecast-{latitude}-{longitude}",
-        task_queue="weather-task-queue",
-    )
-    return await handle.result()
-
-# Plus you need to:
-# 1. Start Temporal server: temporal server start-dev
-# 2. Start Worker: uv run worker.py
-# 3. Start MCP server: uv run weather.py
-```
-
-#### Resonate's Approach (TypeScript)
-
-```typescript
-// Just ONE file! No separate server, no worker process
-
-import { Resonate, Context } from '@resonatehq/sdk';
-
-const resonate = new Resonate();
-await resonate.start();
-
-// Regular async function - that's it!
-async function fetchNWS(ctx: Context, url: string): Promise<any> {
-  const response = await fetch(url, { 
-    headers: { 'User-Agent': 'resonate-weather/1.0' },
-    signal: AbortSignal.timeout(5000) 
-  });
-  return response.json();
-}
-
-// No @workflow.defn, no special imports, just regular code
-async function getForecast(
-  ctx: Context, 
-  latitude: number, 
-  longitude: number
-): Promise<string> {
-  // Durable API call with automatic retries
-  const pointsData = await resonate.run(
-    ctx,
-    'fetchPoints',
-    fetchNWS,
-    `${NWS_API_BASE}/points/${latitude},${longitude}`
-  );
-
-  const forecastData = await resonate.run(
-    ctx,
-    'fetchForecast',
-    fetchNWS,
-    pointsData.properties.forecast
-  );
-
-  return formatForecast(forecastData);
-}
-
-// MCP tool handler - calls our durable function
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { latitude, longitude } = request.params.arguments;
-  
-  // That's it! Automatic durability, retries, and state management
-  const result = await resonate.run(
-    `forecast-${latitude}-${longitude}`,
-    getForecast,
-    latitude,
-    longitude
-  );
-  
-  return { content: [{ type: 'text', text: result }] };
-});
-
-// Run: npm run weather
-```
-
-### Key Differences Highlighted
-
-1. **No Infrastructure Required**
-   - ❌ Temporal: Must run `temporal server start-dev` in separate terminal
-   - ✅ Resonate: Just `npm run weather` and go
-
-2. **No Worker Management**
-   - ❌ Temporal: Must create and run separate Worker process
-   - ✅ Resonate: Workers are handled automatically
-
-3. **No Special Patterns**
-   - ❌ Temporal: `workflow.unsafe.imports_passed_through()`, `@workflow.defn`, `@workflow.run`, `workflow.execute_activity()`
-   - ✅ Resonate: Just `resonate.run()` - that's it!
-
-4. **Simpler Mental Model**
-   - ❌ Temporal: Learn Workflows, Activities, Workers, Task Queues, Signals, Queries
-   - ✅ Resonate: Learn `resonate.run()` - done!
-
-## 📦 What's Included
-
-### 1. Weather Forecast Tool (`src/weather-server.ts`)
-
-A durable weather forecast MCP tool that:
-- Fetches real-time data from the National Weather Service API
-- Automatically retries failed API calls
-- Maintains state across crashes
-- Handles network timeouts gracefully
-
-**Use case:** Claude Desktop can ask for weather forecasts reliably, even if the API is temporarily down.
-
-### 2. Invoice Processing with Human-in-the-Loop (`src/invoice-server.ts`)
-
-A long-running invoice processing workflow that:
-- Accepts invoice submissions
-- Waits for human approval (with timeout)
-- Processes payments only after approval
-- Maintains state during the entire waiting period
-- Survives process crashes while waiting
-
-**Use case:** AI agent can prepare invoices, but humans maintain control over final payment execution.
-
-## 🎯 Getting Started
-
-### Prerequisites
-
-- Node.js 18+ or Bun
-- No other infrastructure needed!
-
-### Installation
-
+### Install
 ```bash
-cd /Users/flossypurse/code/example-mcp-tools-ts
 npm install
 ```
 
-### Running the Examples
-
-#### Weather MCP Server
-
+### Run the Weather Tool
 ```bash
 npm run weather
 ```
 
-#### Invoice MCP Server
+### Configure with Claude Desktop
 
-```bash
-npm run invoice
-```
-
-### Configuring with Claude Desktop
-
-Add to your `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "resonate-weather": {
-      "command": "node",
-      "args": [
-        "/Users/yourname/code/example-mcp-tools-ts/dist/weather-server.js"
-      ]
-    },
-    "resonate-invoice": {
-      "command": "node",
-      "args": [
-        "/Users/yourname/code/example-mcp-tools-ts/dist/invoice-server.js"
-      ]
-    }
-  }
-}
-```
-
-Or if using `tsx`:
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
@@ -251,281 +48,240 @@ Or if using `tsx`:
       "command": "npx",
       "args": [
         "tsx",
-        "/Users/yourname/code/example-mcp-tools-ts/src/weather-server.ts"
+        "/absolute/path/to/example-mcp-tools-ts/src/weather-server.ts"
       ]
     }
   }
 }
 ```
 
-## 🧪 Testing the Tools
+Restart Claude Desktop, then ask: "What's the weather in San Francisco?"
 
-### Weather Tool
+## How It Works
 
-1. Open Claude Desktop
-2. Ask: "What's the weather forecast for San Francisco?" (37.7749, -122.4194)
-3. Claude will use the `get_forecast` tool
-4. Get reliable results even if the API has transient failures
+### Weather Example
 
-### Invoice Tool
+The weather tool fetches forecasts from the National Weather Service API:
 
-1. Ask Claude: "Submit an invoice for $100 consulting and $50 expenses"
-2. Claude creates the invoice and waits for approval
-3. In another message, say: "Approve the invoice"
-4. Payments are processed automatically
-
-**Try the durability:**
-- Submit an invoice
-- Quit Claude Desktop while it's pending
-- Restart Claude and check the status
-- The invoice is still there, waiting!
-
-## 💡 Why This Matters
-
-### For Developers
-
-**Temporal Forces You To:**
-- Run and manage a Temporal server
-- Understand complex concepts (Workflows, Activities, Task Queues)
-- Write significant boilerplate
-- Debug across multiple processes
-- Configure retry policies manually
-
-**Resonate Lets You:**
-- Write regular async functions
-- Add durability with one function call
-- Run everything in one process
-- Get automatic retries out of the box
-- Focus on business logic, not infrastructure
-
-### For Production
-
-Both Temporal and Resonate provide:
-- ✅ Automatic retries
-- ✅ State persistence
-- ✅ Crash recovery
-- ✅ Long-running operations
-- ✅ Observability
-
-But Resonate does it with:
-- ✅ Less code
-- ✅ Simpler deployment
-- ✅ Fewer moving parts
-- ✅ Easier debugging
-
-## 📈 Code Metrics Comparison
-
-| Metric | Temporal (Python) | Resonate (TypeScript) | Improvement |
-|--------|-------------------|------------------------|-------------|
-| **Files required** | 4 | 1 | **75% fewer** |
-| **Lines of code** | ~150 | ~80 | **47% fewer** |
-| **Processes needed** | 3 | 1 | **67% fewer** |
-| **Decorators to learn** | 5+ | 1 | **80% fewer** |
-| **Special patterns** | 3+ | 0 | **100% fewer** |
-| **Setup steps** | 6 | 2 | **67% fewer** |
-
-## 🏗️ Architecture Comparison
-
-### Temporal Architecture
-
-```
-┌─────────────────┐
-│ Claude Desktop  │
-└────────┬────────┘
-         │ MCP
-         ▼
-┌─────────────────┐      ┌─────────────────┐
-│  MCP Server     │─────▶│ Temporal Server │
-│  (weather.py)   │      │  (localhost:7233)│
-└─────────────────┘      └────────┬─────────┘
-                                   │
-                                   ▼
-                         ┌─────────────────┐
-                         │  Worker Process  │
-                         │   (worker.py)    │
-                         └─────────────────┘
-
-3 separate processes, 2 network hops, complex state sync
-```
-
-### Resonate Architecture
-
-```
-┌─────────────────┐
-│ Claude Desktop  │
-└────────┬────────┘
-         │ MCP
-         ▼
-┌─────────────────────────┐
-│  MCP Server + Resonate  │
-│  (weather-server.ts)    │
-│  ┌──────────────┐       │
-│  │   Resonate   │       │
-│  │   (embedded) │       │
-│  └──────────────┘       │
-└─────────────────────────┘
-
-1 process, 0 network hops, simple and fast
-```
-
-## 🔍 Deep Dive: What Makes Resonate Simpler?
-
-### 1. No Separate Infrastructure
-
-**Temporal:**
-```bash
-# Terminal 1: Start Temporal server
-temporal server start-dev
-
-# Terminal 2: Start Worker
-uv run worker.py
-
-# Terminal 3: Start MCP server
-uv run weather.py
-```
-
-**Resonate:**
-```bash
-# Just one command
-npm run weather
-```
-
-### 2. No Special Decorators
-
-**Temporal:**
-```python
-@workflow.defn
-class GetForecast:
-    @workflow.run
-    async def run(self, ...): ...
-
-@activity.defn
-async def make_nws_request(...): ...
-
-@workflow.signal
-async def approve_invoice(self): ...
-
-@workflow.query
-def get_status(self): ...
-```
-
-**Resonate:**
 ```typescript
-// Just regular functions + resonate.run()
-async function getForecast(...) {
-  return await resonate.run(...);
+import { Resonate, Context } from '@resonatehq/sdk';
+
+const resonate = new Resonate();
+await resonate.start();
+
+// Regular async function with automatic retry
+async function fetchNWS(ctx: Context, url: string) {
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Resonate-MCP-Example',
+      'Accept': 'application/geo+json'
+    }
+  });
+  
+  if (!response.ok) {
+    throw new Error(`NWS API error: ${response.status}`);
+  }
+  
+  return response.json();
+}
+
+// Register for durability
+resonate.register('fetchNWS', fetchNWS);
+
+// Use in your workflow
+async function getForecast(ctx: Context, lat: number, lon: number) {
+  // Durable API call - retries automatically on failure
+  const pointsData = await ctx.run(fetchNWS, pointsUrl);
+  const forecastData = await ctx.run(fetchNWS, forecastUrl);
+  
+  return formatForecast(forecastData);
+}
+
+resonate.register('getForecast', getForecast);
+```
+
+**Key Benefits:**
+- `ctx.run()` makes API calls durable - they'll retry on failure
+- State is preserved if your process crashes
+- No decorators, task queues, or special patterns to learn
+
+### Invoice Example
+
+The invoice tool demonstrates human-in-the-loop workflows:
+
+```typescript
+async function processInvoice(ctx: Context, invoice: Invoice) {
+  // Submit for approval
+  const submissionResult = await ctx.run(submitInvoice, invoice);
+  
+  // Wait for human decision (could be hours or days)
+  const decision = await ctx.lfc(
+    `invoice-approval-${invoice.id}`,
+    (decision: string) => decision === 'approved' || decision === 'rejected'
+  );
+  
+  if (decision === 'approved') {
+    // Process payment
+    const payment = await ctx.run(processPayment, invoice);
+    return { status: 'paid', payment };
+  }
+  
+  return { status: 'rejected' };
 }
 ```
 
-### 3. No Import Magic
+**Key Benefits:**
+- Process can wait for human input indefinitely
+- State is maintained even if the server restarts
+- No polling, no manual state management
 
-**Temporal:**
-```python
-# This is required and non-obvious
-with workflow.unsafe.imports_passed_through():
-    from workflows.weather_activities import make_nws_request
+## Project Structure
+
+```
+src/
+├── weather-server.ts     # Weather forecast MCP tool
+├── invoice-server.ts     # Invoice processing with human-in-the-loop
+└── shared/
+    └── types.ts          # Shared TypeScript types
 ```
 
-**Resonate:**
+## Features Demonstrated
+
+✅ **Durable API Calls** - Automatic retries with exponential backoff  
+✅ **Error Handling** - Graceful degradation on API failures  
+✅ **State Persistence** - Survives process restarts  
+✅ **Human-in-the-Loop** - Wait for external input indefinitely  
+✅ **Type Safety** - Full TypeScript support  
+✅ **MCP Integration** - Works with Claude Desktop and other MCP clients  
+
+## Running the Examples
+
+### Weather Tool
+```bash
+npm run weather
+```
+
+Ask Claude: "What's the weather forecast for Seattle?"
+
+### Invoice Tool
+```bash
+npm run invoice
+```
+
+Ask Claude: "Submit invoice INV-001 for $150 to ACME Corp"
+
+Then approve/reject:
+```bash
+# In another terminal
+curl -X POST http://localhost:3000/approve/INV-001
+# or
+curl -X POST http://localhost:3000/reject/INV-001
+```
+
+## Extending the Examples
+
+### Add Your Own Tool
+
+1. Create a new file in `src/` (e.g., `my-tool-server.ts`)
+2. Define your durable functions:
+
 ```typescript
-// Normal imports
-import { Resonate } from '@resonatehq/sdk';
+async function myDurableOperation(ctx: Context, input: string) {
+  const result = await ctx.run(externalAPI, input);
+  return processResult(result);
+}
+
+resonate.register('myDurableOperation', myDurableOperation);
 ```
 
-### 4. No Manual Worker Setup
+3. Wrap in an MCP server:
 
-**Temporal:**
-```python
-worker = Worker(
-    client,
-    task_queue="weather-task-queue",  # Manual config
-    workflows=[GetForecast],           # Manual registration
-    activities=[make_nws_request],     # Manual registration
-)
-```
-
-**Resonate:**
 ```typescript
-// Workers are automatic - just call resonate.run()
+const server = new Server({
+  name: 'my-tool',
+  version: '1.0.0',
+}, { capabilities: { tools: {} } });
+
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  if (request.params.name === 'my_tool') {
+    const result = await resonate.run(
+      'my-op-1',
+      myDurableOperation,
+      request.params.arguments.input
+    );
+    return { content: [{ type: 'text', text: result }] };
+  }
+});
 ```
 
-## 🎓 Learning Path
+4. Add npm script in `package.json`:
 
-### To Build with Temporal:
+```json
+{
+  "scripts": {
+    "my-tool": "tsx src/my-tool-server.ts"
+  }
+}
+```
 
-1. Learn MCP protocol
-2. Learn Temporal concepts (Workflows, Activities, Workers, Task Queues)
-3. Learn decorators and special patterns
-4. Learn how to configure retry policies
-5. Learn how to set up and run Temporal server
-6. Learn how to debug across multiple processes
+### Connect to Real Services
 
-**Estimated time: 4-8 hours**
+Replace mock data with real API calls:
 
-### To Build with Resonate:
+```typescript
+// Example: OpenWeatherMap instead of NWS
+async function fetchWeather(ctx: Context, city: string) {
+  const apiKey = process.env.OPENWEATHER_API_KEY;
+  const url = `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}`;
+  
+  const response = await fetch(url);
+  return response.json();
+}
 
-1. Learn MCP protocol
-2. Learn `resonate.run()`
+resonate.register('fetchWeather', fetchWeather);
+```
 
-**Estimated time: 1-2 hours**
+### Deploy to Production
 
-## 🚢 Deployment
+Resonate works the same locally and in production:
 
-### Temporal Deployment
+```typescript
+// Development (local)
+const resonate = new Resonate();
 
-Requires:
-- Temporal server infrastructure (self-hosted or Temporal Cloud)
-- Worker deployment and scaling
-- MCP server deployment
-- Load balancer configuration
-- Multiple service health checks
+// Production (with Resonate server)
+const resonate = Resonate.remote({
+  url: process.env.RESONATE_SERVER_URL
+});
+```
 
-### Resonate Deployment
+See [Resonate deployment docs](https://docs.resonatehq.io/deploy) for production patterns.
 
-Requires:
-- MCP server deployment (single service)
-- Optional: Resonate Cloud for distributed state
-- Standard health checks
+## Learn More
 
-## 🤝 Contributing
+- [Resonate Documentation](https://docs.resonatehq.io)
+- [MCP Protocol](https://modelcontextprotocol.io)
+- [TypeScript SDK Guide](https://docs.resonatehq.io/develop/typescript)
+- [Example Applications](https://github.com/resonatehq-examples)
 
-This is a reference example. Feel free to:
-- Fork and adapt for your use case
-- Add more MCP tools
-- Improve error handling
-- Add observability
+## Common Questions
 
-## 📚 Resources
+**Do I need to run a Resonate server?**  
+No, you can start with `new Resonate()` for local development. Switch to `Resonate.remote()` when you need distributed workers or production durability.
 
-- [Resonate Documentation](https://docs.resonatehq.io/)
-- [MCP Protocol Docs](https://modelcontextprotocol.io/)
-- [Temporal's Original Tutorial](https://learn.temporal.io/tutorials/ai/building-mcp-tools-with-temporal/)
+**What happens if my process crashes?**  
+Resonate persists execution state. When your process restarts, workflows resume from the last successful step.
 
-## 🎯 When to Use Each
+**How do retries work?**  
+`ctx.run()` automatically retries failed operations with exponential backoff. You can customize retry behavior with options.
 
-### Use Resonate when:
-- ✅ You want to get started quickly
-- ✅ You prefer simpler code
-- ✅ You want fewer moving parts
-- ✅ You're building new projects
-- ✅ You value developer experience
+**Can I use this with other AI models?**  
+Yes! MCP tools work with any MCP-compatible client, not just Claude.
 
-### Use Temporal when:
-- ✅ You already have Temporal infrastructure
-- ✅ Your team knows Temporal well
-- ✅ You need enterprise support contracts
-- ✅ You have complex workflow patterns
+## Contributing
 
-## 📄 License
+Found a bug or have an improvement? Open an issue or PR at [resonatehq-examples](https://github.com/resonatehq-examples).
+
+## License
 
 MIT
-
-## 🙌 Credits
-
-This example was created to demonstrate that durable execution doesn't have to be complex. Inspired by Temporal's MCP tutorial, reimagined with Resonate's simplicity-first approach.
-
----
-
-**Built with ❤️ by the Resonate team**
-
-*Making durable execution accessible to everyone*

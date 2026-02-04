@@ -166,10 +166,6 @@ Both examples are heavily commented. Open them in your editor:
 
 Change anything! The code is simple and designed to be forked.
 
-### Compare to Temporal
-
-Read [`COMPARISON.md`](./COMPARISON.md) to see exactly how much simpler this is than Temporal's approach.
-
 ## Troubleshooting
 
 ### "Command not found: npx"
@@ -230,5 +226,3 @@ The beauty of Resonate: it's just code. No special infrastructure needed.
 ---
 
 **Time to first working tool: ~10 minutes** ⚡
-
-Compare that to Temporal's 45+ minutes with 3 separate processes! 🚀
