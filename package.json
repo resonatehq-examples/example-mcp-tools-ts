@@ -1,0 +1,30 @@
+{
+  "name": "@resonate/mcp-tools-example",
+  "version": "1.0.0",
+  "description": "Durable MCP Tools with Resonate - A simpler alternative to Temporal",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "weather": "tsx src/weather-server.ts",
+    "invoice": "tsx src/invoice-server.ts",
+    "dev": "tsx watch src/weather-server.ts"
+  },
+  "keywords": [
+    "mcp",
+    "resonate",
+    "durable-execution",
+    "ai-tools"
+  ],
+  "author": "Resonate HQ",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@resonatehq/sdk": "^0.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
