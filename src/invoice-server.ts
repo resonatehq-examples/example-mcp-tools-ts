@@ -26,7 +26,6 @@ import { Resonate, Context } from '@resonatehq/sdk';
 
 // Initialize Resonate
 const resonate = new Resonate();
-resonate.start();
 
 // In-memory state store for approvals (in production, use a real database)
 // This is simpler than Temporal's signal/query pattern!
@@ -49,42 +48,34 @@ interface Invoice {
 }
 
 /**
- * Durable payment processing function
+ * Plain async helper for payment processing.
  * In production, this would call Stripe, PayPal, etc.
  */
-async function processPayment(
-  ctx: Context,
-  line: InvoiceLine
-): Promise<string> {
+async function processPaymentAsync(line: InvoiceLine): Promise<string> {
   // Simulate payment processing
   console.log(`Processing payment: ${line.item} - $${line.amount}`);
-  
+
   // In a real system, you'd call a payment gateway here
   // If it fails, Resonate automatically retries!
   await new Promise(resolve => setTimeout(resolve, 100));
-  
+
   return `Processed payment for ${line.item}: $${line.amount}`;
 }
 
-// Register the payment function
-const durableProcessPayment = resonate.register('processPayment', processPayment);
-
 /**
- * Main invoice processing workflow
- * 
+ * Main invoice processing workflow (generator pattern for v0.10.0)
+ *
  * This workflow:
  * 1. Waits for human approval (with timeout)
  * 2. Processes payments if approved
  * 3. Maintains state throughout
- * 
- * Notice: No @workflow.defn, no special imports, no Workers!
  */
-async function processInvoice(
+function* processInvoice(
   ctx: Context,
   invoice: Invoice
-): Promise<string> {
+): Generator {
   const invoiceId = invoice.id;
-  
+
   // Update status
   const state = approvals.get(invoiceId);
   if (state) {
@@ -98,21 +89,21 @@ async function processInvoice(
 
   while (Date.now() - startTime < timeout) {
     const currentState = approvals.get(invoiceId);
-    
+
     if (currentState?.status === 'approved') {
       break;
     }
-    
+
     if (currentState?.status === 'rejected') {
       return 'REJECTED by user';
     }
-    
+
     // Durable sleep - if process crashes, we resume here!
-    await new Promise(resolve => setTimeout(resolve, pollInterval));
+    yield* ctx.sleep(pollInterval);
   }
 
   const finalState = approvals.get(invoiceId);
-  
+
   // Auto-reject on timeout
   if (finalState?.status === 'pending') {
     if (finalState) {
@@ -124,18 +115,18 @@ async function processInvoice(
   // Process payments if approved
   if (finalState?.status === 'approved' && finalState) {
     finalState.status = 'processing';
-    
+
     const results: string[] = [];
-    
+
     // Process each line item with durability
     for (const line of invoice.lines) {
-      const result = await ctx.run(processPayment, line);
+      const result = (yield* ctx.run(() => processPaymentAsync(line))) as string;
       results.push(result);
     }
 
     finalState.status = 'completed';
     finalState.result = results.join('\n');
-    
+
     return `COMPLETED\n${results.join('\n')}`;
   }
 
@@ -262,7 +253,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // Start the durable workflow (non-blocking)
     // This runs in the background and survives process crashes!
-    durableProcessInvoice(`invoice-${invoice_id}`, invoice).then(result => {
+    durableProcessInvoice.run(`invoice-${invoice_id}`, invoice).then(result => {
       const state = approvals.get(invoice_id);
       if (state) {
         state.result = result;
