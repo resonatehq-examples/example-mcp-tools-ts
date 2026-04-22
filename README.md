@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./assets/banner.png" alt="MCP Tools — Resonate example" />
+</p>
+
 # Building MCP Tools with Resonate
 
 Build production-ready MCP (Model Context Protocol) tools with automatic retries, state management, and fault tolerance using Resonate.
