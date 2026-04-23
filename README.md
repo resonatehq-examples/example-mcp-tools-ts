@@ -1,3 +1,11 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/banner-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="./assets/banner-light.png">
+    <img alt="MCP Tools — Resonate example" src="./assets/banner-dark.png">
+  </picture>
+</p>
+
 # Building MCP Tools with Resonate
 
 Build production-ready MCP (Model Context Protocol) tools with automatic retries, state management, and fault tolerance using Resonate.
