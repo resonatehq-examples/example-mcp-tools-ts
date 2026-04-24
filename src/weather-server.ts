@@ -25,27 +25,22 @@ import { Resonate, Context } from '@resonatehq/sdk';
 // Initialize Resonate - that's it! No servers, no workers, no task queues
 const resonate = new Resonate();
 
-// Start Resonate (connects to local or remote store)
-resonate.start();
-
 // National Weather Service API base URL
 const NWS_API_BASE = 'https://api.weather.gov';
 
 /**
- * Durable function to fetch from NWS API
- * 
- * With Resonate, ANY function can be durable by registering it
- * No need for special @activity.defn decorators or Activity classes!
+ * Plain async helper to fetch from NWS API (not a durable function itself,
+ * but called inside ctx.run which makes it durable).
  */
-async function fetchNWS(ctx: Context, url: string): Promise<any> {
+async function fetchNWS(url: string): Promise<any> {
   const headers = {
     'User-Agent': 'resonate-weather-mcp/1.0',
     'Accept': 'application/geo+json'
   };
 
-  const response = await fetch(url, { 
+  const response = await fetch(url, {
     headers,
-    signal: AbortSignal.timeout(5000) 
+    signal: AbortSignal.timeout(5000)
   });
 
   if (!response.ok) {
@@ -55,40 +50,33 @@ async function fetchNWS(ctx: Context, url: string): Promise<any> {
   return response.json();
 }
 
-// Register the fetch function with Resonate
-const durableFetchNWS = resonate.register('fetchNWS', fetchNWS);
-
 /**
- * Main weather forecast workflow
- * 
- * This is our "workflow" - but notice:
+ * Main weather forecast workflow (generator pattern for v0.10.0)
+ *
  * - No @workflow.defn decorator
  * - No special import patterns
- * - No workflow.execute_activity() ceremony
- * - Just regular async/await!
+ * - Generator with yield* for durable steps
  */
-async function getForecast(
-  ctx: Context, 
-  latitude: number, 
+function* getForecast(
+  ctx: Context,
+  latitude: number,
   longitude: number
-): Promise<string> {
+): Generator {
   try {
     // Step 1: Get the forecast endpoint
-    // Call the registered durable function
     const pointsUrl = `${NWS_API_BASE}/points/${latitude},${longitude}`;
-    const pointsData = await ctx.run(fetchNWS, pointsUrl);
+    const pointsData: any = yield* ctx.run(() => fetchNWS(pointsUrl));
 
     if (!pointsData) {
       return 'Unable to fetch forecast data for this location.';
     }
 
-    // Step 2: Optional delay (durable sleep - survives crashes!)
-    // Unlike Temporal's workflow.sleep(), this is just a regular async operation
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Step 2: Durable sleep (survives crashes!)
+    yield* ctx.sleep(1000);
 
     // Step 3: Get the actual forecast
     const forecastUrl = pointsData.properties.forecast;
-    const forecastData = await ctx.run(fetchNWS, forecastUrl);
+    const forecastData: any = yield* ctx.run(() => fetchNWS(forecastUrl));
 
     if (!forecastData) {
       return 'Unable to fetch detailed forecast.';
@@ -168,7 +156,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // Run the durable workflow using the registered function
     // This ENTIRE operation is now durable - if anything fails, Resonate
     // automatically retries with exponential backoff. No retry policy config needed!
-    const result = await durableGetForecast(executionId, latitude, longitude);
+    const result = await durableGetForecast.run(executionId, latitude, longitude);
 
     return {
       content: [

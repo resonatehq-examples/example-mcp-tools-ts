@@ -20,7 +20,7 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
-    "@resonatehq/sdk": "^0.3.0"
+    "@resonatehq/sdk": "^0.10.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
