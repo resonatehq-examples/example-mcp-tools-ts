@@ -292,4 +292,4 @@ Found a bug or have an improvement? Open an issue or PR at [resonatehq-examples]
 
 ## License
 
-MIT
+Apache 2.0

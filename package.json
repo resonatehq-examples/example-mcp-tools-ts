@@ -17,7 +17,7 @@
     "ai-tools"
   ],
   "author": "Resonate HQ",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
     "@resonatehq/sdk": "^0.10.0"
