@@ -8,6 +8,7 @@
 
 # Building MCP Tools with Resonate
 
+[![SafeSkill 93/100](https://img.shields.io/badge/SafeSkill-93%2F100_Verified%20Safe-brightgreen)](https://safeskill.dev/scan/resonatehq-examples-example-mcp-tools-ts)
 Build production-ready MCP (Model Context Protocol) tools with automatic retries, state management, and fault tolerance using Resonate.
 
 ## What You'll Build
